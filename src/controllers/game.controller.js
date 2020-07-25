@@ -1,5 +1,5 @@
 const projectRoot = process.cwd();
 
-module.exports.renderChooseLevelPage = function (req, res) {
-    res.send('Choose level');
+module.exports.renderGame = function (req, res) {
+    res.send('Game');
 }
