@@ -1,5 +1,5 @@
 const projectRoot = process.cwd();
 
 module.exports.renderGame = function (req, res) {
-    res.send('Game');
+    res.sendFile(projectRoot + '/html/game.html');
 }
