@@ -16,8 +16,9 @@ function resizeThumbnail(resizableThumb, width) {
 async function processMouseMove(event) {
     let xValue = event.clientX;
     let width = xValue > documentCenter ? xValue : documentWidth - xValue;
-    resizeThumbnail(xValue > documentCenter ? cvThumbnail : gameThumbnail, width);
-    resetThumbnail(xValue > documentCenter ? gameThumbnail : cvThumbnail);
+    let {resizableThumbnail, resettableThumbnail} = xValue > documentCenter ? {resizableThumbnail: cvThumbnail, resettableThumbnail: gameThumbnail} : {resizableThumbnail: gameThumbnail, resettableThumbnail: cvThumbnail};
+    resizeThumbnail(resizableThumbnail, width);
+    resetThumbnail(resettableThumbnail);
 }
 
 document.onmousemove = processMouseMove;
