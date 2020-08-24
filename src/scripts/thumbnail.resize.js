@@ -1,5 +1,7 @@
 const gameThumbnail = document.getElementById('gameThumbnail');
 const cvThumbnail = document.getElementById('cvThumbnail');
+const documentWidth = window.innerWidth;
+const documentCenter = parseInt(documentWidth / 2);
 
 function resetThumbnail(resettableThumb) {
     resettableThumb.style.zIndex = '7';
@@ -11,10 +13,8 @@ function resizeThumbnail(resizableThumb, width) {
     resizableThumb.style.width = width + 'px';
 }
 
-function processMouseMove(event) {
+async function processMouseMove(event) {
     let xValue = event.clientX;
-    let documentWidth = window.innerWidth;
-    let documentCenter = parseInt(documentWidth / 2);
     let width = xValue > documentCenter ? xValue : documentWidth - xValue;
     resizeThumbnail(xValue > documentCenter ? cvThumbnail : gameThumbnail, width);
     resetThumbnail(xValue > documentCenter ? gameThumbnail : cvThumbnail);
