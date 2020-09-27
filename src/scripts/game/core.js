@@ -1,7 +1,10 @@
 const starTexture = PIXI.Texture.from('https://pixijs.io/examples/examples/assets/star.png');
 const humanCannonTexture = PIXI.Texture.from('/img/human-cannon.png');
 
+const bulletHeight = 15;
+const numberOfInvadersRows = 5;
 const starAmount = 1000;
+const bulletSpeed = 10;
 let cameraZ = 0;
 const fov = 20;
 const baseSpeed = 0.025;
@@ -10,8 +13,10 @@ const starStretch = 5;
 const starBaseSize = 0.05;
 const stars = [];
 const aliens = [];
+const bullets = [];
 const alienTextures = [];
 const humanCannonSprite = new PIXI.Sprite(humanCannonTexture);
+const bulletGraphic = new PIXI.Graphics().beginFill(0xFFFFFF).drawRect(100, 100, 2, bulletHeight).endFill();
 const pixelsToGameBorder = (window.innerWidth - 600) / 2;
 
 const getNewApp = function () {
@@ -20,6 +25,57 @@ const getNewApp = function () {
         height: window.innerHeight,
         backgroundColor: 0x000000,
         resolution: 1,
+    });
+}
+
+const app = getNewApp();
+const bulletTexture = app.renderer.generateTexture(bulletGraphic);
+
+const getBulletSprite = function () {
+    return new PIXI.Sprite(bulletTexture);
+}
+
+const getBulletContainer = function () {
+    const bulletContainer = new PIXI.Container();
+    bulletContainer.pivot.y = 0;
+    bulletContainer.addChild(getBulletSprite());
+    return bulletContainer;
+}
+
+const createBullet = function () {
+    const bullet = {
+        container: getBulletContainer(),
+        active: false,
+        vy: -bulletSpeed
+    };
+    bullets.push(bullet);
+    app.stage.addChild(bullet.container);
+    return bullet;
+}
+
+const getBullet = function () {
+    let unActiveBullets =  bullets.filter(bullet => bullet.active === false);
+    if (unActiveBullets.length !== 0) {
+        return unActiveBullets[0];
+    } else {
+        return createBullet();
+    }
+}
+
+const initCannonShot = function (cannonPositionX, cannonPositionY) {
+    let bullet = getBullet();
+    bullet.container.x = cannonPositionX;
+    bullet.container.y = cannonPositionY - bulletHeight - 1;
+    bullet.active = true;
+}
+
+const moveBullets = function (delta) {
+    let activeBullets = bullets.filter(bullet => bullet.active === true);
+    activeBullets.forEach(bullet => {
+       bullet.container.y += bullet.vy;
+       if (bullet.container.y < - bulletHeight) {
+           bullet.active = false;
+       }
     });
 }
 
@@ -100,8 +156,6 @@ const keyboard = function (keyName) {
     //The `upHandler`
     key.upHandler = event => {
         if (event.key === key.name) {
-            console.log(key.isDown);
-            console.log(key.release ? true : false)
             if (key.isDown && key.release) key.release();
             key.isDown = false;
             key.isUp = true;
@@ -128,8 +182,17 @@ const initCannonMovementButtonActions = function (humanCannonContainer) {
     right.release = _ => humanCannonContainer.vx = !left.isDown ? 0 : humanCannonContainer.vx;
 }
 
+const initCannonShootAbility = function (humanCannonContainer) {
+    let space = keyboard(' ');
+    space.release = _ => initCannonShot(humanCannonContainer.x, humanCannonContainer.y);
+}
+
 const cannonShouldStop = function () {
     return humanCannonContainer.x <= pixelsToGameBorder && humanCannonContainer.vx < 0 || humanCannonContainer.x >= window.innerWidth - pixelsToGameBorder && humanCannonContainer.vx > 0;
+}
+
+const alienArmyShouldChangeMovementDirection = function (alien) {
+    return alien.x + aliensArmyContainer.x <= pixelsToGameBorder - 50 && aliensArmyContainer.vx < 0 || alien.x +  aliensArmyContainer.x >= window.innerWidth - pixelsToGameBorder + 50 && aliensArmyContainer.vx > 0;
 }
 
 const moveCannon = function (delta) {
@@ -145,8 +208,10 @@ const getHumanCannonContainer = function (app) {
     humanCannonSprite.anchor.set(0.5);
     humanCannonSprite.scale.set(0.5);
     initCannonMovementButtonActions(humanCannonContainer);
+    initCannonShootAbility(humanCannonContainer);
     humanCannonContainer.addChild(humanCannonSprite);
-    app.ticker.add(moveCannon)
+    app.ticker.add(moveCannon);
+    app.ticker.add(moveBullets);
     return humanCannonContainer;
 }
 
@@ -189,15 +254,15 @@ const getAlienRowContainer = function (alienTypeId) {
 
 const getAliensArmyContainer = function (app) {
     const aliensArmyContainer = new PIXI.Container();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < numberOfInvadersRows; i++) {
         aliensArmyContainer.addChild(getAlienRowContainer(i));
     }
     aliensArmyContainer.x = window.innerWidth / 2 - aliensArmyContainer.width / 2;
     aliensArmyContainer.y = 100;
+    aliensArmyContainer.vx = 10;
     return aliensArmyContainer;
 }
 
-const app = getNewApp();
 const background = getInitializedBackground(app);
 const humanCannonContainer = getHumanCannonContainer(app);
 const aliensArmyContainer = getAliensArmyContainer(app);
@@ -207,9 +272,20 @@ app.stage.addChild(humanCannonContainer);
 app.stage.addChild(aliensArmyContainer);
 
 setInterval(() => {
+    let shouldChangeDirection = false;
     aliens.forEach(alien => {
         alien.switchSpriteState();
+        if (!shouldChangeDirection) {
+            shouldChangeDirection = alienArmyShouldChangeMovementDirection(alien);
+        }
     })
+    if (!shouldChangeDirection) {
+        aliensArmyContainer.x += aliensArmyContainer.vx;
+    } else {
+        aliensArmyContainer.y += 10;
+        aliensArmyContainer.vx *= -1;
+    }
+
 }, 500)
 
 document.body.appendChild(app.view);
