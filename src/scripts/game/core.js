@@ -13,6 +13,7 @@ const starStretch = 5;
 const starBaseSize = 0.05;
 const stars = [];
 const aliens = [];
+const alienHitboxes = [];
 const bullets = [];
 const alienTextures = [];
 const humanCannonSprite = new PIXI.Sprite(humanCannonTexture);
@@ -38,7 +39,8 @@ const getBulletSprite = function () {
 const getBulletContainer = function () {
     const bulletContainer = new PIXI.Container();
     bulletContainer.pivot.y = 0;
-    bulletContainer.addChild(getBulletSprite());
+    bulletContainer.sprite = getBulletSprite();
+    bulletContainer.addChild(bulletContainer.sprite);
     return bulletContainer;
 }
 
@@ -62,21 +64,55 @@ const getBullet = function () {
     }
 }
 
+const getAliveAliens = function () {
+    return aliens.filter(alien => alien.alive === true);
+}
+
 const initCannonShot = function (cannonPositionX, cannonPositionY) {
     let bullet = getBullet();
+    bullet.container.sprite.visible = true;
     bullet.container.x = cannonPositionX;
     bullet.container.y = cannonPositionY - bulletHeight - 1;
     bullet.active = true;
+}
+
+const doesBulletInsideAliensContainer = function (bulletContainerY) {
+    return bulletContainerY > aliensArmyContainer.y && bulletContainerY < aliensArmyContainer.y + aliensArmyContainer.height;
 }
 
 const moveBullets = function (delta) {
     let activeBullets = bullets.filter(bullet => bullet.active === true);
     activeBullets.forEach(bullet => {
        bullet.container.y += bullet.vy;
-       if (bullet.container.y < - bulletHeight) {
+       if (bullet.container.y < -bulletHeight) {
            bullet.active = false;
+           return;
+       }
+       if (doesBulletInsideAliensContainer(bullet.container.y)) {
+           checkBulletState(bullet);
        }
     });
+}
+
+const doesBulletHitAlienHitbox = function (hitbox, bullet, xOffset, yOffset) {
+    return bullet.container.x >= hitbox.minX + xOffset && bullet.container.x <= hitbox.maxX + xOffset && bullet.container.y >= hitbox.minY + yOffset && bullet.container.y <= hitbox.maxY + yOffset;
+}
+
+const checkBulletState = function (bullet) {
+    let xContainerOffset = aliensArmyContainer.x;
+    let yContainerOffset = aliensArmyContainer.y;
+    getAliveAliens().forEach((alien) => {
+        if (doesBulletHitAlienHitbox(alien.hitbox, bullet, xContainerOffset, yContainerOffset)) {
+            killAlien(alien, bullet);
+        }
+    })
+}
+
+const killAlien = function (alien, bullet) {
+    bullet.active = false;
+    bullet.container.sprite.visible = false;
+    alien.sprite.visible = false;
+    alien.alive = false;
 }
 
 const randomizeStar = function (star, initial) {
@@ -153,7 +189,6 @@ const keyboard = function (keyName) {
         event.preventDefault();
     };
 
-    //The `upHandler`
     key.upHandler = event => {
         if (event.key === key.name) {
             if (key.isDown && key.release) key.release();
@@ -163,7 +198,6 @@ const keyboard = function (keyName) {
         event.preventDefault();
     };
 
-    //Attach event listeners
     window.addEventListener(
         "keydown", key.downHandler.bind(key), true
     );
@@ -215,11 +249,25 @@ const getHumanCannonContainer = function (app) {
     return humanCannonContainer;
 }
 
+const getAlienHitbox = function (alien) {
+    return {
+        minY: alien.y,
+        maxY: alien.y + alien.sprite.height,
+        minX: alien.x,
+        maxX: alien.x + alien.sprite.width
+    }
+}
+
+const initAlienHitboxes = function () {
+    aliens.forEach(alien => alien.hitbox = getAlienHitbox(alien));
+}
+
 const getAlienContainer = function (x, y, alienTypeId) {
     let alien = {
         x: x,
         y: y,
         alienTypeId: alienTypeId,
+        alive: true,
         state: 0,
         sprite: new PIXI.Sprite(alienTextures[alienTypeId][0]),
         switchSpriteState: () => {
@@ -230,7 +278,6 @@ const getAlienContainer = function (x, y, alienTypeId) {
             alien.state = alien.state === 0 ? 1 : 0
         }
     }
-    alien.sprite.anchor.set(0.5);
     alien.sprite.scale.set(0.3);
     const alienContainer = new PIXI.Container();
     alienContainer.x = alien.x;
@@ -243,7 +290,7 @@ const getAlienContainer = function (x, y, alienTypeId) {
 const getAlienRowContainer = function (alienTypeId) {
     let x = 0;
     const y = alienTypeId * 40;
-    alienTextures[alienTypeId] =  [PIXI.Texture.from(`/img/alien${alienTypeId}-state0.png`), PIXI.Texture.from(`/img/alien${alienTypeId}-state1.png`)];
+    alienTextures[alienTypeId] = [PIXI.Texture.from(`/img/alien${alienTypeId}-state0.png`), PIXI.Texture.from(`/img/alien${alienTypeId}-state1.png`)];
     const alienRowContainer = new PIXI.Container();
     for (let i = 0; i < 12; i++){
         alienRowContainer.addChild(getAlienContainer(x, y, alienTypeId));
@@ -257,7 +304,7 @@ const getAliensArmyContainer = function (app) {
     for (let i = 0; i < numberOfInvadersRows; i++) {
         aliensArmyContainer.addChild(getAlienRowContainer(i));
     }
-    aliensArmyContainer.x = window.innerWidth / 2 - aliensArmyContainer.width / 2;
+    aliensArmyContainer.x = window.innerWidth / 2 - aliensArmyContainer.width / 2 - 15;
     aliensArmyContainer.y = 100;
     aliensArmyContainer.vx = 10;
     return aliensArmyContainer;
@@ -271,9 +318,9 @@ app.stage.addChild(background);
 app.stage.addChild(humanCannonContainer);
 app.stage.addChild(aliensArmyContainer);
 
-setInterval(() => {
+const moveAliens = function () {
     let shouldChangeDirection = false;
-    aliens.forEach(alien => {
+    getAliveAliens().forEach(alien => {
         alien.switchSpriteState();
         if (!shouldChangeDirection) {
             shouldChangeDirection = alienArmyShouldChangeMovementDirection(alien);
@@ -285,7 +332,10 @@ setInterval(() => {
         aliensArmyContainer.y += 10;
         aliensArmyContainer.vx *= -1;
     }
+}
 
-}, 500)
+setInterval(moveAliens , 500)
+
+setTimeout(initAlienHitboxes, 500)
 
 document.body.appendChild(app.view);
