@@ -5,12 +5,11 @@ const bulletHeight = 15;
 const numberOfInvadersRows = 5;
 const starAmount = 1000;
 const bulletSpeed = 10;
-let cameraZ = 0;
 const fov = 20;
 const baseSpeed = 0.025;
-let speed = 0;
 const starStretch = 5;
 const starBaseSize = 0.05;
+const humanSpaceshipMinimumShootingInterval = 500;
 const stars = [];
 const aliens = [];
 const alienHitboxes = [];
@@ -19,6 +18,17 @@ const alienTextures = [];
 const humanCannonSprite = new PIXI.Sprite(humanCannonTexture);
 const bulletGraphic = new PIXI.Graphics().beginFill(0xFFFFFF).drawRect(100, 100, 2, bulletHeight).endFill();
 const pixelsToGameBorder = (window.innerWidth - 600) / 2;
+let backgroundSpeed = 0;
+let cameraZ = 0;
+let alienShipShootingInterval = 500;
+let lastBulletShootTimestamp = Date.now();
+let lastAlienBulletShootTimestamp = Date.now();
+let alienSound;
+let cannonSound = PIXI.sound.Sound.from({
+    url: '/sounds/shoot.wav',
+    preload: true,
+    volume: 0.1
+})
 
 const getNewApp = function () {
     return new PIXI.Application({
@@ -36,6 +46,55 @@ const getBulletSprite = function () {
     return new PIXI.Sprite(bulletTexture);
 }
 
+const initSounds = function () {
+
+    let firstSound = {
+        sound: PIXI.sound.Sound.from({
+            url: '/sounds/fastinvader1.wav',
+            preload: true,
+            volume: 0.8
+        })
+    };
+
+    let fourthSound = {
+        sound: PIXI.sound.Sound.from({
+            url: '/sounds/fastinvader4.wav',
+            preload: true,
+            volume: 0.8
+        }),
+        next: firstSound
+    }
+
+    let thirdSound = {
+        sound: PIXI.sound.Sound.from({
+            url: '/sounds/fastinvader3.wav',
+            preload: true,
+            volume: 0.8
+        }),
+        next: fourthSound
+    }
+
+    let secondSound = {
+        sound: PIXI.sound.Sound.from({
+            url: '/sounds/fastinvader2.wav',
+            preload: true,
+            volume: 0.8
+        }),
+        next: thirdSound
+    }
+
+    firstSound.next = secondSound;
+
+    alienSound = firstSound;
+}
+
+initSounds();
+
+const playAlienSound = function () {
+    alienSound.sound.play();
+    alienSound = alienSound.next;
+}
+
 const getBulletContainer = function () {
     const bulletContainer = new PIXI.Container();
     bulletContainer.pivot.y = 0;
@@ -44,8 +103,13 @@ const getBulletContainer = function () {
     return bulletContainer;
 }
 
+const doesSpaceshipCanShoot = function (lastShootTimestamp, minimumShootingInterval) {
+    return Date.now() - lastShootTimestamp > minimumShootingInterval;
+}
+
 const createBullet = function () {
     const bullet = {
+        index: bullets.length,
         container: getBulletContainer(),
         active: false,
         vy: -bulletSpeed
@@ -68,12 +132,57 @@ const getAliveAliens = function () {
     return aliens.filter(alien => alien.alive === true);
 }
 
-const initCannonShot = function (cannonPositionX, cannonPositionY) {
+const getIndexArray = function (arrayLength) {
+    let array = new Array();
+    for (let i = 0; i < arrayLength; i++) {
+        array.push(i)
+    }
+    return array;
+}
+
+const getShootingAlienIndex = function () {
+
+}
+
+//TODO Пофиксить багу нахождения undefined алгоритмом
+//TODO Добавить возможность пулям задевать корабль
+const getShootingAlienPosition = function () {
+    let alienContainer = null;
+    let rowLength = aliensArmyContainer.children[0].children.length;
+    let columnLength = aliensArmyContainer.children.length;
+    let indexArray = getIndexArray(rowLength);
+    while (alienContainer === null) {
+        let randomIndex = Math.floor(Math.random() * indexArray.length);
+        indexArray.splice(randomIndex, 1);
+        let selectedAlienColumnIndex = indexArray[randomIndex];
+        let selectedAlienRowIndex = columnLength - 1;
+        while (alienContainer === null && selectedAlienRowIndex !== 0) {
+            if (aliens[rowLength * selectedAlienRowIndex + selectedAlienColumnIndex].alive === true) {
+                alienContainer = aliensArmyContainer.children[selectedAlienRowIndex].children[selectedAlienColumnIndex];
+            }
+            selectedAlienRowIndex--;
+        }
+    }
+    return {
+        x: alienContainer.x + aliensArmyContainer.x,
+        y: alienContainer.y + aliensArmyContainer.y + 100
+    }
+}
+
+const initShoot = function (shooterPositionX, shooterPositionY, bulletVy) {
     let bullet = getBullet();
     bullet.container.sprite.visible = true;
-    bullet.container.x = cannonPositionX;
-    bullet.container.y = cannonPositionY - bulletHeight - 1;
+    bullet.container.x = shooterPositionX;
+    bullet.container.y = shooterPositionY - bulletHeight - 1;
+    bullet.vy = bulletVy;
     bullet.active = true;
+    cannonSound.play();
+}
+
+const initAlienShot = function () {
+    let shootingAlienPosition = getShootingAlienPosition();
+    initShoot(shootingAlienPosition.x, shootingAlienPosition.y, bulletSpeed);
+    lastAlienBulletShootTimestamp = Date.now();
 }
 
 const doesBulletInsideAliensContainer = function (bulletContainerY) {
@@ -83,14 +192,14 @@ const doesBulletInsideAliensContainer = function (bulletContainerY) {
 const moveBullets = function (delta) {
     let activeBullets = bullets.filter(bullet => bullet.active === true);
     activeBullets.forEach(bullet => {
-       bullet.container.y += bullet.vy;
-       if (bullet.container.y < -bulletHeight) {
-           bullet.active = false;
-           return;
-       }
-       if (doesBulletInsideAliensContainer(bullet.container.y)) {
-           checkBulletState(bullet);
-       }
+        bullet.container.y += bullet.vy;
+        if (bullet.container.y < -bulletHeight) {
+            bullet.active = false;
+            return;
+        }
+        if (doesBulletInsideAliensContainer(bullet.container.y)) {
+            checkBulletState(bullet);
+        }
     });
 }
 
@@ -98,7 +207,7 @@ const doesBulletHitAlienHitbox = function (hitbox, bullet, xOffset, yOffset) {
     return bullet.container.x >= hitbox.minX + xOffset && bullet.container.x <= hitbox.maxX + xOffset && bullet.container.y >= hitbox.minY + yOffset && bullet.container.y <= hitbox.maxY + yOffset;
 }
 
-const checkBulletState = function (bullet) {
+const checkBulletState = async function (bullet) {
     let xContainerOffset = aliensArmyContainer.x;
     let yContainerOffset = aliensArmyContainer.y;
     getAliveAliens().forEach((alien) => {
@@ -145,8 +254,8 @@ const getInitializedBackground = function (app) {
 
     // Listen for animate update
     app.ticker.add((delta) => {
-        speed += speed / 20;
-        cameraZ += delta * 10 * (speed + baseSpeed);
+        backgroundSpeed += backgroundSpeed / 20;
+        cameraZ += delta * 10 * (backgroundSpeed + baseSpeed);
         for (let i = 0; i < starAmount; i++) {
             const star = stars[i];
             if (star.z < cameraZ) randomizeStar(star);
@@ -164,7 +273,7 @@ const getInitializedBackground = function (app) {
             star.sprite.scale.x = distanceScale * starBaseSize;
             // Star is looking towards center so that y axis is towards center.
             // Scale the star depending on how fast we are moving, what the stretchfactor is and depending on how far away it is from the center.
-            star.sprite.scale.y = distanceScale * starBaseSize + distanceScale * speed * starStretch * distanceCenter / app.renderer.screen.width;
+            star.sprite.scale.y = distanceScale * starBaseSize + distanceScale * backgroundSpeed * starStretch * distanceCenter / app.renderer.screen.width;
             star.sprite.rotation = Math.atan2(dyCenter, dxCenter) + Math.PI / 2;
         }
     });
@@ -218,7 +327,12 @@ const initCannonMovementButtonActions = function (humanCannonContainer) {
 
 const initCannonShootAbility = function (humanCannonContainer) {
     let space = keyboard(' ');
-    space.release = _ => initCannonShot(humanCannonContainer.x, humanCannonContainer.y);
+    space.release = () => {
+        if(doesSpaceshipCanShoot(lastBulletShootTimestamp, humanSpaceshipMinimumShootingInterval)){
+            initShoot(humanCannonContainer.x, humanCannonContainer.y, -bulletSpeed)
+            lastBulletShootTimestamp = Date.now();
+        }
+    };
 }
 
 const cannonShouldStop = function () {
@@ -332,10 +446,13 @@ const moveAliens = function () {
         aliensArmyContainer.y += 10;
         aliensArmyContainer.vx *= -1;
     }
+    // playAlienSound();
 }
 
-setInterval(moveAliens , 500)
+setInterval(moveAliens, 500);
 
-setTimeout(initAlienHitboxes, 500)
+setInterval(initAlienShot, alienShipShootingInterval);
+
+setTimeout(initAlienHitboxes, 500);
 
 document.body.appendChild(app.view);
