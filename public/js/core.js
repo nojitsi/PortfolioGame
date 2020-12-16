@@ -144,7 +144,6 @@ const getShootingAlienIndex = function () {
 
 }
 
-//TODO Пофиксить багу нахождения undefined алгоритмом
 //TODO Добавить возможность пулям задевать корабль
 const getShootingAlienPosition = function () {
     let alienContainer = null;
@@ -152,7 +151,7 @@ const getShootingAlienPosition = function () {
     let columnLength = aliensArmyContainer.children.length;
     let indexArray = getIndexArray(rowLength);
     while (alienContainer === null) {
-        let randomIndex = Math.floor(Math.random() * indexArray.length);
+        let randomIndex = Math.floor(Math.random() * (indexArray.length - 1));
         indexArray.splice(randomIndex, 1);
         let selectedAlienColumnIndex = indexArray[randomIndex];
         let selectedAlienRowIndex = columnLength - 1;
@@ -165,7 +164,7 @@ const getShootingAlienPosition = function () {
     }
     return {
         x: alienContainer.x + aliensArmyContainer.x,
-        y: alienContainer.y + aliensArmyContainer.y + 100
+        y: alienContainer.y + aliensArmyContainer.y + 50
     }
 }
 
@@ -176,7 +175,7 @@ const initShoot = function (shooterPositionX, shooterPositionY, bulletVy) {
     bullet.container.y = shooterPositionY - bulletHeight - 1;
     bullet.vy = bulletVy;
     bullet.active = true;
-    cannonSound.play();
+    //cannonSound.play();
 }
 
 const initAlienShot = function () {
